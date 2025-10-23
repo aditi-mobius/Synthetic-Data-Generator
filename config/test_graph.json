@@ -1,0 +1,131 @@
+{
+  "nodes": [
+    {
+      "id": "customer_node",
+      "name": "Customer",
+      "columns": [
+        {
+          "name": "customer_id", "type": "integer", "is_primary_key": true,
+          "distribution": {"type": "sequential", "start": 1}
+        },
+        {
+          "name": "full_name", "type": "string",
+          "distribution": {"type": "name"}
+        },
+        {
+          "name": "email", "type": "string", "is_unique": true,
+          "distribution": {"type": "custom_format", "pattern": "user_#####@example.com"}
+        },
+        {
+          "name": "signup_date", "type": "date",
+          "distribution": {"type": "date", "start_date": "-2y", "end_date": "today"}
+        },
+        {
+          "name": "last_login_date", "type": "date",
+          "distribution": {"type": "date", "start_date": "-1y", "end_date": "today"}
+        },
+        {
+          "name": "country", "type": "string",
+          "distribution": {"type": "categorical", "values": ["USA", "Canada", "UK", "Germany", "France"]}
+        },
+        {
+          "name": "loyalty_status", "type": "string",
+          "distribution": {"type": "categorical", "values": ["bronze", "silver", "gold"], "probabilities": [0.6, 0.3, 0.1]}
+        }
+      ]
+    },
+    {
+      "id": "product_node",
+      "name": "Product",
+      "row_count": 20,
+      "columns": [
+        {
+          "name": "product_id", "type": "integer", "is_primary_key": true,
+          "distribution": {"type": "sequential", "start": 1001}
+        },
+        {
+          "name": "product_name", "type": "string",
+          "distribution": {"type": "categorical", "values": ["Laptop", "Mouse", "Keyboard", "Monitor", "Webcam", "USB Hub", "External SSD"]}
+        },
+        {
+          "name": "category", "type": "string",
+          "distribution": {
+            "type": "conditional",
+            "on": "product_name",
+            "cases": {
+              "Laptop": {"type": "categorical", "values": ["Electronics"]},
+              "Monitor": {"type": "categorical", "values": ["Electronics"]},
+              "Mouse": {"type": "categorical", "values": ["Peripherals"]},
+              "Keyboard": {"type": "categorical", "values": ["Peripherals"]},
+              "Webcam": {"type": "categorical", "values": ["Peripherals"]},
+              "USB Hub": {"type": "categorical", "values": ["Accessories"]},
+              "External SSD": {"type": "categorical", "values": ["Storage"]}
+            }
+          }
+        },
+        {
+          "name": "price", "type": "float",
+          "distribution": {
+            "type": "conditional",
+            "on": "category",
+            "cases": {
+              "Electronics": {"type": "uniform", "min": 400.0, "max": 2500.0},
+              "Peripherals": {"type": "uniform", "min": 25.0, "max": 300.0},
+              "Accessories": {"type": "uniform", "min": 10.0, "max": 90.0},
+              "Storage": {"type": "uniform", "min": 80.0, "max": 500.0}
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "order_node",
+      "name": "Order",
+      "row_count": 100,
+      "time_series_spec": {
+        "column": "order_date",
+        "start": "2023-01-01",
+        "freq": "D"
+      },
+      "columns": [
+        {
+          "name": "order_id", "type": "integer", "is_primary_key": true,
+          "distribution": {"type": "sequential", "start": 5000}
+        },
+        {"name": "customer_id", "type": "integer", "foreign_key": {"table": "Customer", "column": "customer_id"}},
+        {
+          "name": "status", "type": "string",
+          "distribution": {"type": "categorical", "values": ["pending", "shipped", "delivered", "cancelled"], "probabilities": [0.1, 0.2, 0.6, 0.1]}
+        }
+      ]
+    },
+    {
+      "id": "order_item_node",
+      "name": "OrderItem",
+      "row_count": 300,
+      "columns": [
+        {
+          "name": "order_item_id", "type": "integer", "is_primary_key": true,
+          "distribution": {"type": "sequential", "start": 10000}
+        },
+        {"name": "order_id", "type": "integer", "foreign_key": {"table": "Order", "column": "order_id"}},
+        {"name": "product_id", "type": "integer", "foreign_key": {"table": "Product", "column": "product_id"}},
+        {"name": "quantity", "type": "integer", "distribution": {"type": "uniform", "min": 1, "max": 5}}
+      ]
+    }
+  ]
+  ,
+  "edges": [
+    {"source": "customer_node", "target": "order_node", "relation_type": "foreign_key"},
+    {"source": "order_node", "target": "order_item_node", "relation_type": "foreign_key"},
+    {"source": "product_node", "target": "order_item_node", "relation_type": "foreign_key"}
+  ],
+  "constraints": [
+    {
+      "type": "expression",
+      "table": "Customer",
+      "expression": "last_login_date >= signup_date",
+      "description": "A customer's last login must be after or on the same day as their signup."
+    }
+  ]
+}

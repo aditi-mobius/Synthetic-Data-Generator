@@ -1,0 +1,26 @@
+neuron_def:
+  id: "ATSD-DataGen-Neuron"
+  name: "Synthetic Data Generator Neuron"
+  description: >
+    Generates high-fidelity, constraint-compliant synthetic datasets based on
+    graph-based data schemas, Markov blankets, Ecore models, and CSPNs.
+
+  inputs:
+    - graph_path: "Path to scenario graph file (GraphML, JSON, or GPickle)"
+    - ecore_models: "Field-level schema and constraints"
+    - cspn_models: "Cross-node constraint models"
+    - markov_blankets: "Conditional dependency metadata"
+    - constraints: "Heptad metadata and logical constraints"
+
+  preconditions:
+    - "All Ecore and CSPN paths must exist and be valid."
+    - "Graph must form a valid connected subgraph of the schema."
+
+  effects:
+    - "Generates constraint-compliant multi-table synthetic data."
+
+  evaluation:
+    metrics:
+      - fidelity_score
+      - constraint_violation_rate
+      - diversity_metric
