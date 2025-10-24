@@ -19,8 +19,4 @@ neuron_def:
   effects:
     - "Generates constraint-compliant multi-table synthetic data."
 
-  evaluation:
-    metrics:
-      - fidelity_score
-      - constraint_violation_rate
-      - diversity_metric
+
