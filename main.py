@@ -6,7 +6,7 @@ from core.scenario_data_generator import generate_scenario_data
 from core.post_validator import post_generation_validate
 from core.file_exporter import export_all_tables
 
-def generate_tables_from_graph(graph_path: str, output_dir: str, output_format: str = "csv", row_counts_override: str = None, locale: str = "en_US"):
+def generate_tables_from_graph(graph_path: str, output_dir: str, output_format: str = "json", row_counts_override: str = None, locale: str = "en_US"):
     # Parse the scenario graph into working schema
     working_schema = parse_graph(graph_path)
 
@@ -17,7 +17,7 @@ def generate_tables_from_graph(graph_path: str, output_dir: str, output_format: 
     # Override row counts if provided
     if row_counts_override:
         try:
-            overrides = json.loads(row_counts_override)
+            overrides = json.loads(row_counts_override) 
             if isinstance(overrides, dict):
                 # Apply specific overrides from a dictionary
                 for table in working_schema.get("tables", []):
@@ -55,8 +55,8 @@ if __name__ == "__main__":
     parser.add_argument("--graph", type=str, required=True, help="Path to input scenario graph")
     parser.add_argument("--out", type=str, default="data/output", help="Output folder")
     parser.add_argument("--fmt", type=str, default="json", help="Output format: csv/json/parquet")
-    parser.add_argument("--row-counts", type=str, help='JSON string to override row counts, e.g., \'{"Customer": 200, "Order": 500}\'')
-    parser.add_argument("--locale", type=str, default="en_US", help="Default locale for Faker data generation (e.g., 'en_US', 'fr_FR', 'ja_JP', 'ar_PS)")
+    parser.add_argument("--row-counts", type=str, default="100", help='JSON string to override row counts, e.g., \'{"Customer": 200, "Order": 500}\'')
+    parser.add_argument("--locale", type=str, default="en_US", help="Default locale for Faker data generation (e.g., 'en_US', 'fr_FR', 'ja_JP', 'ar_PS)'")
     args = parser.parse_args()
 
     paths = generate_tables_from_graph(args.graph, args.out, args.fmt, args.row_counts, args.locale)
