@@ -7,8 +7,11 @@ import networkx as nx
 def _load_from_json(path):
     with open(path, "r") as f:
         data = json.load(f)
-        edge_key = "edges" if "edges" in data else "links"
-        return nx.node_link_graph(data, edges=edge_key)
+        # Handle older networkx versions by ensuring the edge key is 'links'
+        if "edges" in data and "links" not in data:
+            data["links"] = data.pop("edges")
+        # The 'attrs' argument is not supported in all versions, so we avoid it.
+        return nx.node_link_graph(data, directed=True, multigraph=False)
 
 
 def _load_from_gpickle(path):
@@ -44,12 +47,25 @@ def load_ecore_model(path):
         return json.load(f)
 
 
-def parse_graph(graph_path):
+def parse_graph(graph_path: str = None, graph_data: dict = None):
     """
     Parse a scenario graph into a working schema compatible with the generation pipeline.
     Produces working_schema with 'tables' and 'edges'.
+
+    Args:
+        graph_path: The file path to the graph JSON file.
+        graph_data: A dictionary containing the graph data directly.
     """
-    G = load_graph(graph_path)
+    if graph_data:
+        # To support older networkx versions, we ensure the edge key is 'links'
+        # before passing the data to the parser.
+        if "edges" in graph_data and "links" not in graph_data:
+            graph_data["links"] = graph_data.pop("edges")
+        G = nx.node_link_graph(graph_data, directed=True, multigraph=False)
+    elif graph_path:
+        G = load_graph(graph_path)
+    else:
+        raise ValueError("Either 'graph_path' or 'graph_data' must be provided.")
 
     tables = []
     edges = []

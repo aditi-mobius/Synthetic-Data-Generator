@@ -1,9 +1,10 @@
 import numpy as np
 import random
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Callable
 from ._faker_manager import FakerManager
 
-def generate_column(column_def: Dict[str, Any], n: int, faker_manager: FakerManager, table_locale: str | None) -> List[Any]:
+
+def generate_column(column_def: Dict[str, Any], n: int, faker_manager: FakerManager, table_locale: str | None, table_data: 'DataFrame' = None) -> List[Any]:
     """
     Generate a column of synthetic values for a given column definition.
     Supports base types and distributions for scenario-aware data generation.
@@ -18,6 +19,7 @@ def generate_column(column_def: Dict[str, Any], n: int, faker_manager: FakerMana
     Args:
         faker_manager: The FakerManager to get locale-specific instances.
         table_locale: The locale specified for the table, if any.
+        table_data: The DataFrame containing already generated columns for the current table.
     """
     ctype = column_def.get("type", "string")
     dist = column_def.get("distribution", {}) or {}
@@ -27,70 +29,126 @@ def generate_column(column_def: Dict[str, Any], n: int, faker_manager: FakerMana
     column_locale = dist.get("locale")
     faker_instance = faker_manager.get_instance(column_locale or table_locale)
 
-    # 1. Name or ID-like fields
-    if dtype == "name" or column_def.get("name", "").lower() in ("name", "fullname"):
-        return [faker_instance.name() for _ in range(n)]
-    if dtype == "name_male":
-        return [faker_instance.name_male() for _ in range(n)]
-    if dtype == "name_female":
-        return [faker_instance.name_female() for _ in range(n)]
+    # --- Generator functions for different distribution types ---
 
-    # 2. Custom formatted strings (like EMP####)
-    if dtype == "custom_format" or dist.get("pattern"):
+    def _generate_name(col_def, num_rows, faker):
+        return [faker.name() for _ in range(num_rows)]
+
+    def _generate_name_male(col_def, num_rows, faker):
+        return [faker.name_male() for _ in range(num_rows)]
+
+    def _generate_name_female(col_def, num_rows, faker):
+        return [faker.name_female() for _ in range(num_rows)]
+
+    def _generate_custom_format(col_def, num_rows, faker):
+        dist_def = col_def.get("distribution", {})
         pattern = dist.get("pattern") or ""
+        return ["".join(str(random.randint(0, 9)) if ch == "#" else ch for ch in pattern) for _ in range(num_rows)]
+
+    def _generate_categorical(col_def, num_rows, faker):
+        dist_def = col_def.get("distribution", {})
+        values = dist_def.get("values", [])
+        probs = dist_def.get("probabilities")
+        if values:
+            return list(np.random.choice(values, size=num_rows, p=probs))
+        return [faker.word() for _ in range(num_rows)]
+
+    def _generate_sequential(col_def, num_rows, faker):
+        dist_def = col_def.get("distribution", {})
+        start = int(dist_def.get("start", 1))
+        step = int(dist_def.get("step", 1))
+        return list(range(start, start + step * num_rows, step))
+
+    def _generate_date(col_def, num_rows, faker):
+        dist_def = col_def.get("distribution", {})
+        start_date = dist_def.get("start_date", "-30d")
+        end_date = dist_def.get("end_date", "today")
+        return [faker.date_between(start_date=start_date, end_date=end_date) for _ in range(num_rows)]
+
+    def _generate_integer(col_def, num_rows, faker):
+        dist_def = col_def.get("distribution", {})
+        dist_type = dist_def.get("type", "uniform")  # Default to uniform for integers
+        if dist_type == "uniform":
+            low = int(dist_def.get("min", 0))
+            high = int(dist_def.get("max", 100))
+            return np.random.randint(low, high + 1, size=num_rows).tolist()
+        # Default to normal distribution for integers if not uniform
+        mean = float(dist_def.get("mean", 50))
+        std = float(dist_def.get("stddev", 10))
+        arr = np.random.normal(loc=mean, scale=std, size=num_rows).round().astype(int)
+        mn = int(dist_def.get("min", -10**9))
+        mx = int(dist_def.get("max", 10**9))
+        return np.clip(arr, mn, mx).tolist()
+
+    def _generate_float(col_def, num_rows, faker):
+        dist_def = col_def.get("distribution", {})
+        mean = float(dist_def.get("mean", 50.0))
+        std = float(dist_def.get("stddev", 10.0))
+        arr = np.random.normal(loc=mean, scale=std, size=num_rows)
+        mn = float(dist_def.get("min", -1e9))
+        mx = float(dist_def.get("max", 1e9))
+        return np.clip(arr, mn, mx).tolist()
+
+    def _generate_boolean(col_def, num_rows, faker):
+        dist_def = col_def.get("distribution", {})
+        probs = dist_def.get("probabilities", [0.5, 0.5])
+        return list(np.random.choice([True, False], size=num_rows, p=probs))
+
+    def _generate_conditional(col_def, num_rows, faker):
+        dist_def = col_def.get("distribution", {})
+        on_column = dist_def.get("on")
+        cases = dist_def.get("cases", {})
+        if not on_column or not cases or table_data is None:
+            return [None] * num_rows
+
         results = []
-        for _ in range(n):
-            s = "".join(str(random.randint(0, 9)) if ch == "#" else ch for ch in pattern)
-            results.append(s)
+        for _, row in table_data.iterrows():
+            on_value = row[on_column]
+            case_def = cases.get(on_value)
+            if case_def:
+                # The sub-generator needs a column definition.
+                # We create a temporary one.
+                temp_col_def = {"distribution": case_def}
+                # We only need one value.
+                results.append(generate_column(temp_col_def, 1, faker_manager, table_locale, table_data)[0])
+            else:
+                results.append(None)
         return results
 
-    # 3. Categorical values
-    if dtype == "categorical":
-        values = dist.get("values", [])
-        probs = dist.get("probabilities")
-        if values:
-            return list(np.random.choice(values, size=n, p=probs))
-        return [faker_instance.word() for _ in range(n)]
+    # --- Mapping from type to generator function ---
+    generator_map: Dict[str, Callable] = {
+        "name": _generate_name,
+        "name_male": _generate_name_male,
+        "name_female": _generate_name_female,
+        "custom_format": _generate_custom_format,
+        "categorical": _generate_categorical,
+        "sequential": _generate_sequential,
+        "date": _generate_date,
+        "integer": _generate_integer,
+        "float": _generate_float,
+        "boolean": _generate_boolean,
+        "uniform": _generate_integer,  # Assuming uniform is for integers
+        "normal": _generate_integer,   # Assuming normal is for integers by default
+        "conditional": _generate_conditional,
+    }
 
-    # 4. Sequential IDs or ordered values
-    if dtype == "sequential":
-        start = int(dist.get("start", 1))
-        step = int(dist.get("step", 1))
-        return list(range(start, start + step * n, step))
+    # --- Main generation logic ---
+    # Prioritize distribution type, then column type, then fallback
+    generator_key = dtype
+    if not generator_key:
+        if ctype in generator_map:
+            generator_key = ctype
+        elif dist.get("pattern"):
+            generator_key = "custom_format"
+        elif column_def.get("name", "").lower() in ("name", "fullname"):
+            generator_key = "name"
 
-    # 5. Dates / temporal data
-    if dtype == "date":
-        start_date = dist.get("start_date", "-30d")
-        end_date = dist.get("end_date", "today")
-        return [faker_instance.date_between(start_date=start_date, end_date=end_date) for _ in range(n)]
+    if generator_key in generator_map:
+        return generator_map[generator_key](column_def, n, faker_instance)
 
-    # 6. Integer distributions (normal or uniform)
-    if ctype == "integer" or dtype in ("normal", "uniform", None):
-        if dtype == "uniform":
-            low = int(dist.get("min", 0))
-            high = int(dist.get("max", 100))
-            return np.random.randint(low, high + 1, size=n).tolist()
-        else:
-            mean = float(dist.get("mean", 50))
-            std = float(dist.get("stddev", 10))
-            arr = np.random.normal(loc=mean, scale=std, size=n).round().astype(int).tolist()
-            mn = int(dist.get("min", -10**9))
-            mx = int(dist.get("max", 10**9))
-            return [max(mn, min(mx, int(x))) for x in arr]
+    # Fallback for simple types without a specific distribution
+    if ctype in generator_map:
+        return generator_map[ctype](column_def, n, faker_instance)
 
-    # 7. Floating-point distributions
-    if ctype == "float":
-        mean = float(dist.get("mean", 50.0))
-        std = float(dist.get("stddev", 10.0))
-        arr = np.random.normal(loc=mean, scale=std, size=n).tolist()
-        mn = float(dist.get("min", -1e9))
-        mx = float(dist.get("max", 1e9))
-        return [max(mn, min(mx, float(x))) for x in arr]
-
-    # 8. Boolean fields
-    if ctype == "boolean":
-        probs = dist.get("probabilities", [0.5, 0.5])
-        return list(np.random.choice([True, False], size=n, p=probs))
-
-    # 9. Fallback: generic strings
+    # Final fallback
     return [faker_instance.word() for _ in range(n)]
