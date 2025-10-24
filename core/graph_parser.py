@@ -99,6 +99,55 @@ def parse_graph(graph_path):
 
     return working_schema
 
+def parse_graph_from_dict(graph_dict: dict) -> dict:
+    """
+    Parse a scenario graph from a dictionary into a working schema.
+    This is used for API-based generation where the graph is in the request body.
+    """
+    edge_key = "edges" if "edges" in graph_dict else "links"
+    # Use networkx to interpret the node-link structure, supporting 'edges' or 'links'
+    # The 'attrs' argument is not supported by node_link_graph, attributes are read directly from node/edge dicts.
+    G = nx.node_link_graph(graph_dict, directed=True, multigraph=False, edges=edge_key)
+
+    tables = []
+    edges = []
+
+    for node_id, attrs in G.nodes(data=True):
+        table_name = attrs.get("name", str(node_id))
+        row_count = attrs.get("row_count", 100)
+        locale = attrs.get("locale")
+        time_series_spec = attrs.get("time_series_spec")
+
+        columns = attrs.get("columns", [{"name": "id", "type": "int"}])
+        dependencies = attrs.get("markov_blanket", [])
+        constraints = attrs.get("constraints", [])
+        if "constraints" in G.graph and G.graph["constraints"]:
+            constraints.extend([c for c in G.graph["constraints"] if c.get("table") == table_name])
+
+        table_entry = {
+            "name": table_name,
+            "columns": columns,
+            "rows": row_count,
+            "dependencies": dependencies,
+        }
+        if locale:
+            table_entry["locale"] = locale
+        if time_series_spec:
+            table_entry["time_series_spec"] = time_series_spec
+
+        tables.append(table_entry)
+
+    for u, v, edge_data in G.edges(data=True):
+        edge_entry = {
+            "from": G.nodes[u].get("name", str(u)),
+            "to": G.nodes[v].get("name", str(v)),
+            "relation_type": edge_data.get("relation_type", "dependency"),
+            "constraints": edge_data.get("constraints", {}),
+        }
+        edges.append(edge_entry)
+
+    return {"tables": tables, "edges": edges}
+
 
 
 
