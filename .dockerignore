@@ -1,0 +1,15 @@
+# Git
+.git
+.gitignore
+
+# Python cache and virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv
+venv
+
+# IDE / Editor specific
+.vscode/
+.idea/

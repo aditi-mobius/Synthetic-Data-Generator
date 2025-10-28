@@ -61,7 +61,7 @@ def generate_scenario_data(working_schema: Dict[str, Any]) -> Dict[str, pd.DataF
         if table_locale:
             print(f"  [INFO] Using table-specific locale '{table_locale}' for table '{table_name}'")
         
-        n = int(table_spec.get("rows", 100))
+        n = int(table_spec.get("rows", 5))
         df = pd.DataFrame()
 
         for col_def in table_spec.get("columns", []):
